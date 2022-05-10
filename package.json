@@ -1,0 +1,21 @@
+{
+  "name": "Learn WebGPU",
+  "version": "0.0.1",
+  "description": "",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sketchpunklabs/learn_webgpu.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/sketchpunklabs/learn_webgpu/issues"
+  },
+  "homepage": "https://github.com/sketchpunklabs/learn_webgpu#readme",
+  "scripts": {
+    "docsify": "docsify serve ./"
+  },
+  "dependencies": {
+    "docsify-cli": "^4.4.4"
+  }
+}

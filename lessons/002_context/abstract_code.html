@@ -1,0 +1,125 @@
+<!DOCTYPE html><html><head><title></title>
+<meta http-equiv="origin-trial" content="AjPwILqou86MNqXlfZc0tZycsl9U9sV/uI2ti0RK1/w0kT3/l35O3zugkEb31z1gKbxnakvZahtfWf9h42buSA4AAABJeyJvcmlnaW4iOiJodHRwOi8vbG9jYWxob3N0OjMwMDAiLCJmZWF0dXJlIjoiV2ViR1BVIiwiZXhwaXJ5IjoxNjYzNzE4Mzk5fQ=="/>
+</head><body><script type="module">
+    
+async function Init(){
+    if( !navigator.gpu ){ alert( 'WebGPU Not Available' ); return; }
+
+    let gpu = await Context.init( new Canvas().setSize( 400, 400 ) );
+    gpu.consoleLimits();
+}
+
+window.addEventListener( 'load', Init );
+
+class Canvas{
+    // #region MAIN
+    ref     = null;
+    width   = 0;    
+    height  = 0;
+
+    constructor( c ){
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Handle various ways to get or create canvas
+        switch( typeof c ){
+            case 'string': this.ref = document.getElementById( c ); break;
+            case 'object': this.ref = c; break;
+            default:
+                // Grab first available canvas
+                this.ref = document.querySelector( 'canvas' );
+                
+                // None found, create & append one
+                if( !this.ref ){
+                    this.ref = document.createElement( 'canvas' );
+                    document.body.appendChild( this.ref );
+                }
+                break;
+        }
+
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        this.ctx = this.ref.getContext( 'webgpu' );
+    }
+    // #endregion
+
+    // #region SETTERS // GETTERS
+    getSize(){ return [ this.width, this.height ]; }
+
+    setSize( cssWidth, cssHeight ){
+        const dpr             = window.devicePixelRatio || 1;
+
+        // Need to round, you can't have a fraction of a pixel, can you?
+        const deviceWidth     = Math.round( cssWidth  * dpr );
+        const deviceHeight    = Math.round( cssHeight * dpr );
+
+        // Internally set with the right size
+        this.ref.width        = deviceWidth;
+        this.ref.height       = deviceHeight;
+
+        // Externally set with the right size
+        this.ref.style.width  = cssWidth + 'px';
+        this.ref.style.height = cssHeight + 'px';
+
+        // Save size for future use
+        this.width            = deviceWidth;
+        this.height           = deviceHeight;
+        return this;
+    }
+    // #endregion
+
+    // #region WEBGPU
+    configure( props ){ this.ctx.configure( props ); } // { device, format, size, }
+    preferredFormat( adapter ){ return this.ctx.getPreferredFormat( adapter ); }
+    // #endregion
+}
+
+
+class Context{
+    constructor( adapter, device, canvas ){
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        this.adapter = adapter;
+        this.device  = device;
+        this.canvas  = canvas;
+        this.format  = canvas.preferredFormat( adapter );
+
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        this.canvas.configure({
+            device                  : this.device, 
+            format                  : this.format, 
+            size                    : canvas.getSize(),
+            compositingAlphaMode    : 'opaque',
+        });
+
+        // Set a callback to alert when device is no longer available
+        device.lost.then( info=>console.error( 'Device was lost.', info ) );
+    }
+    
+    consoleLimits(){
+        let i;
+        for( i in this.adapter.limits ){
+            console.log( `- ${i} : ${this.adapter.limits[i]}` );
+        }
+    }
+
+    static async init( canvas ){
+        if( !navigator.gpu ){ console.warn( "WebGPU Not Available" ); return null; }
+
+        const adapter = await navigator.gpu.requestAdapter();
+        if( !adapter ){ console.error( 'Unable to obtain webgpu adapter' ); return; }
+
+        const device = await adapter.requestDevice( { /* options */ } );
+        if( !device ){ console.error( 'Unable to obtain webgpu device' ); return null; }
+
+        return new Context( adapter, device, canvas );
+    } 
+}
+
+</script>
+<style>   
+   canvas { border:1px solid #505050; }
+   html, body{ margin:0px; padding:0px; width:100%; height:100%; }
+   body{ background-color: #1E1E1E; 
+       display:flex; flex-direction:column; 
+       align-items:center; justify-content: center;
+   }
+</style>
+<canvas id='pgCanvas'></canvas>
+</body></html>

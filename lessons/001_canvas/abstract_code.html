@@ -1,0 +1,83 @@
+<!DOCTYPE html><html><head><title></title>
+<meta http-equiv="origin-trial" content="AjPwILqou86MNqXlfZc0tZycsl9U9sV/uI2ti0RK1/w0kT3/l35O3zugkEb31z1gKbxnakvZahtfWf9h42buSA4AAABJeyJvcmlnaW4iOiJodHRwOi8vbG9jYWxob3N0OjMwMDAiLCJmZWF0dXJlIjoiV2ViR1BVIiwiZXhwaXJ5IjoxNjYzNzE4Mzk5fQ=="/>
+</head><body><script type="module">
+    
+async function Init(){
+    if( !navigator.gpu ){
+        alert( 'WebGPU Not Available' );
+    }else{
+        //let canvas = new Canvas( 'pgCanvas' );
+        //let canvas = new Canvas( document.querySelector( 'canvas' ) );
+        let canvas = new Canvas();
+
+        canvas.setSize( 400, 400 );
+    }
+}
+
+window.addEventListener( 'load', Init );
+
+class Canvas{
+    // #region MAIN
+    ref     = null;
+    width   = 0;    
+    height  = 0;
+
+    constructor( c ){
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Handle various ways to get or create canvas
+        switch( typeof c ){
+            case 'string': this.ref = document.getElementById( c ); break;
+            case 'object': this.ref = c; break;
+            default:
+                // Grab first available canvas
+                this.ref = document.querySelector( 'canvas' );
+                
+                // None found, create & append one
+                if( !this.ref ){
+                    this.ref = document.createElement( 'canvas' );
+                    document.body.appendChild( this.ref );
+                }
+                break;
+        }
+
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        this.ctx = this.ref.getContext( 'webgpu' );
+    }
+    // #endregion
+
+    // #region SETTERS // GETTERS
+    setSize( cssWidth, cssHeight ){
+        const dpr             = window.devicePixelRatio || 1;
+
+        // Need to round, you can't have a fraction of a pixel, can you?
+        const deviceWidth     = Math.round( cssWidth  * dpr );
+        const deviceHeight    = Math.round( cssHeight * dpr );
+
+        // Internally set with the right size
+        this.ref.width        = deviceWidth;
+        this.ref.height       = deviceHeight;
+
+        // Externally set with the right size
+        this.ref.style.width  = cssWidth + 'px';
+        this.ref.style.height = cssHeight + 'px';
+
+        // Save size for future use
+        this.width            = deviceWidth;
+        this.height           = deviceHeight;
+        return this;
+    }
+    // #endregion
+}
+
+
+</script>
+<style>   
+   canvas { border:1px solid #505050; }
+   html, body{ margin:0px; padding:0px; width:100%; height:100%; }
+   body{ background-color: #1E1E1E; 
+       display:flex; flex-direction:column; 
+       align-items:center; justify-content: center;
+   }
+</style>
+<canvas id='pgCanvas'></canvas>
+</body></html>

@@ -1,0 +1,9 @@
+https://jhildenbiddle.github.io/docsify-themeable/#/
+https://docsify.js.org/#/themes?id=other-themes
+https://github.com/njleonzhang/docsify-edit-on-github
+
+
+https://blog.programster.org/getting-started-with-docsify
+
+
+https://github.com/gpuweb/gpuweb/blob/main/design/ErrorHandling.md

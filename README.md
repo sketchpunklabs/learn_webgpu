@@ -1,3 +1,3 @@
 # Learn WebGPU
 
-> An awesome project.
+https://sketchpunklabs.github.io/learn_webgpu/

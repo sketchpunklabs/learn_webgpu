@@ -64,9 +64,12 @@ ctx.configure({
 ### Raw Code & Abstractions
 So thats the end. The following links will have the raw code & abstraction in relation to this lesson.
 
-<div style="text-align:center">
-<a href="/lessons/002_context/raw_code.html" target="_blank">Raw Code</a> :: 
-<a href="/lessons/002_context/abstract_code.html" target="_blank">Abstracted Code</a>
-</div>
+**Raw Code** -
+<a href="/learn_webgpu/lessons/002_context/raw_code.html" target="_blank">Run</a> :: 
+<a href="https://github.com/sketchpunklabs/learn_webgpu/blob/main/lessons/002_context/raw_code.html" target="_blank">Source</a>
+
+**Abstracted Code** - 
+<a href="/learn_webgpu/lessons/002_context/abstract_code.html" target="_blank">Run</a> :: 
+<a href="https://github.com/sketchpunklabs/learn_webgpu/blob/main/lessons/002_context/abstract_code.html" target="_blank">Source</a>
 
 [Previous Page](/lessons/001_canvas/index.md)

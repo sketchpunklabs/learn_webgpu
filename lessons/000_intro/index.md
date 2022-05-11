@@ -6,10 +6,10 @@
 [![Patreon](https://img.shields.io/badge/Patreon-donate-red?style=flat-square&logo=patreon)](https://www.patreon.com/sketchpunk)
 
 
-This tutorial site or maybe web book is to teach how to use WebGPU by building a lightly abstracted library that can be used to just render 3D objects or a starting point for a web based game engine.
+This site is an ebook to teach how to use WebGPU by building a lightly abstracted library that can be used to just render 3D objects or a starting point for a web based game engine.
 
 ### The Plan
-The idea is to slowly build things up with raw examples along with an abstracted version for each lesson, with the hopes that at the end you'll have a nice library to do what you want with webgpu. When its complete & webgpu is out of beta ( 09/2022 ), all the lesson will then be recorded as youtube tutorials using this written form as it's basis.
+The idea is to slowly build the ebook up with raw examples along with an abstracted version for each lesson, with the hopes that at the end you'll have a nice library to do what you want with webgpu. When its complete & webgpu is out of beta ( 09/2022 ), all the lesson will then be recorded as youtube tutorials using this written form as it's basis.
 
 ## Contact & Support
 

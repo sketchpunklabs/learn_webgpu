@@ -73,14 +73,16 @@ In this lesson we stepped through the raw code of how to setup our canvas for **
 
 The abstraction I'm laying forth is just what I think is good for learning maybe even for prototyping but most likely not what you'd want for your production code. The goal is teach you two ways to go about things & for you to go about it in your way at the end.
 
-**Raw Code** -
-<a href="/learn_webgpu/lessons/001_canvas/raw_code.html" target="_blank">Run</a> :: 
-<a href="https://github.com/sketchpunklabs/learn_webgpu/blob/main/lessons/001_canvas/raw_code.html" target="_blank">Source</a>
+||||
+| - | -: | -: |
+| Raw Code | <a href="/learn_webgpu/lessons/001_canvas/raw_code.html" target="_blank">Run</a> | <a href="https://github.com/sketchpunklabs/learn_webgpu/blob/main/lessons/001_canvas/raw_code.html" target="_blank">Source</a>
+| Abstracted Code | <a href="/learn_webgpu/lessons/001_canvas/abstract_code.html" target="_blank">Run</a> | <a href="https://github.com/sketchpunklabs/learn_webgpu/blob/main/lessons/001_canvas/abstract_code.html" target="_blank">Source</a>
 
-**Abstracted Code** - 
-<a href="/learn_webgpu/lessons/001_canvas/abstract_code.html" target="_blank">Run</a> :: 
-<a href="https://github.com/sketchpunklabs/learn_webgpu/blob/main/lessons/001_canvas/abstract_code.html" target="_blank">Source</a>
 
 ?> Fun Tip : You can use the 2D canvas as a texture source. You can do 2D drawing with it & then have it converted to a gpu texture that you can then render in your 3D scene.
 
+<div style="float:right">
+
 [Next Page](/lessons/002_context/index.md)
+
+</div>

@@ -10,7 +10,7 @@ This is your bread & butter when it comes to 3D rendering as this is the primary
 I know in the beginning I said buffer's don't really have types. The thing is you need an ArrayBuffer or one of its type array wrappers to push data to the gpu. At a bare minimum you need vertices to render any mesh, so lets start with defining a simple triangle.
 
 ```js
-const vertices = new Float32Array( [0,0,0, 0,1,0, 1,0,0 ] );
+const vertices = new Float32Array( [ 0,0,0, 1,0,0, 0,1,0 ] );
 ```
 
 Vertices will always exist as float data. It's the case because the location of a point in space can be anywhere in the positive or negative direction along with having a value less then 1. You can think of it as taking tiny steps to reach one full step, so you need floats to be able to define a number that exists between 0 and 1, like 0.5 can be your half step across the virtual world. Now, behind the scenes you can access the actual ArrayBuffer by doing ***console.log( vertices.buffer )*** which will tell you it's an array buffer with 36 bytes.

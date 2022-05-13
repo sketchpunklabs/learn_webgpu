@@ -8,11 +8,40 @@ async function Init(){
     await Context.init( new Canvas().setSize( 400, 400 ) );
     // Context.consoleLimits();
 
-    const buf = Buffer.vertex( [ 0,0,0, 1,0,0, 0,1,0 ] );
-    console.log( buf );
+    const bufVerts = Buffer.vertex( [ 0,0,0, 1,0,0, 0,1,0 ] );
+    
+    const pipeline = new Pipeline( VERT_SRC, FRAG_SRC, 'TestShader' )
+        .usePositionAttribute()
+        .build();
+
+    console.log( pipeline );
 }
 
 window.addEventListener( 'load', Init );
+
+// #region SHADER SOURCE
+const VERT_SRC = `
+struct FragOut{
+    @builtin(position) Position : vec4<f32>;
+}
+
+struct Attrib{
+    @location(0) pos : vec3<f32>;
+}
+
+@stage(vertex)
+fn main( attrib: Attrib ) -> FragOut {
+    var out: FragOut;
+    out.Position = vec4<f32>( attrib.pos, 1.0 );
+    return out;
+}`;
+
+const FRAG_SRC = `
+@stage(fragment)
+fn main() -> @location(0) vec4<f32> {
+    return vec4<f32>( 1.0, 1.0, 1.0, 1.0 );
+}`;
+// #endregion
 
 // #region CANVAS & CONTEXT
 class Canvas{
@@ -75,7 +104,6 @@ class Canvas{
     // #endregion
 }
 
-
 class Context{
     // #region MAIN
     static adapter = null;
@@ -119,6 +147,11 @@ class Context{
     static createBuffer( props ){ return this.device.createBuffer( props ); }
     // #endregion
 
+    // #region SHADERS
+    static renderPipeline( props ){ console.log( props ); return this.device.createRenderPipeline( props ); }
+    static shaderModule( props ){ return this.device.createShaderModule( props ); }
+    // #endregion
+
     // #region INFORMATION
     static consoleLimits(){
         let i;
@@ -131,7 +164,6 @@ class Context{
 // #endregion
 
 // #region CORE
-
 // https://www.w3.org/TR/webgpu/#vertex-formats
 const DataTypes = Object.freeze({
     Float    : 0,
@@ -206,7 +238,112 @@ class Buffer{
         return new Buffer( data, bSize, usage, aType, label );
     }
 }
+// #endregion
 
+// #region SHADERS / PIPELINES
+// STANDARD SHADER ATTRIB LOCATIONS
+const AttribLoc = Object.freeze({
+    POS            : 0,
+    NORM           : 1,
+    UV             : 2,
+    COLOR          : 3,
+    SKIN_INDEX     : 4,
+    SKIN_WEIGHT    : 5,
+});
+
+const DrawMode = Object.freeze({
+    Tri : 'triangle-list',
+});
+
+const Culling = Object.freeze({
+    None     : 'none',
+    Back     : 'back',
+    Front    : 'front',
+});
+
+const Winding = Object.freeze({
+    CCW : 'ccw',
+    CW  : 'cw',
+});
+
+class Attribute{
+    location = -1;
+    dataType = -1;
+    constructor( loc, dataType ){
+        this.location = loc;
+        this.dataType = dataType;
+    }
+
+    toDescriptor(){
+        return {
+            arrayStride : DataTypes.info[ this.dataType ].byteSize,
+            attributes :[{
+                shaderLocation  : this.location,
+                format          : DataTypes.info[ this.dataType ].string,
+                offset          : 0, 
+            }]
+        };
+    }
+
+    static Position( loc=AttribLoc.POS ){ return new Attribute( loc, DataTypes.Float3 ); }
+    static Normal( loc=AttribLoc.NORM ){  return new Attribute( loc, DataTypes.Float3 ); }
+    static Uv( loc=AttribLoc.UV ){        return new Attribute( loc, DataTypes.Float2 ); }
+    static Color( loc=AttribLoc.COLOR ){  return new Attribute( loc, DataTypes.Float3 ); }
+}
+
+class Pipeline{
+    name        = 'unnamed';
+    resource    = null;
+    srcVertex   = '';
+    srcFragment = '';
+
+    // Attribute can be an individual buffer, Or an interleaved buffer.
+    attributes  = [];
+
+    // Primitive Information
+    winding     = Winding.CCW;
+    culling     = Culling.Back;
+    drawMode    = DrawMode.Tri;
+
+    constructor( srcVert, srcFrag, name='unnamed'){
+        this.srcVertex      = srcVert;
+        this.srcFragment    = srcFrag;
+        this.name           = name;
+    }
+
+    addAttribute( attr ){ this.attributes.push( attr ); return this; }
+    usePositionAttribute( loc=AttribLoc.POS ){ this.addAttribute( Attribute.Position( loc ) );  return this; }
+    useColorAttribute( loc=AttribLoc.COLOR ){  this.addAttribute( Attribute.Color( loc ) );     return this; }
+
+    build(){
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        const buffers = [];
+        for( const i of this.attributes ) buffers.push( i.toDescriptor() );
+
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        const props = {
+            label       : this.name,
+            vertex      : { 
+                entryPoint  : 'main', 
+                module      : Context.shaderModule( { code:this.srcVertex } ),
+                buffers     : buffers,
+            },
+            fragment    : { 
+                entryPoint  : 'main', 
+                module      : Context.shaderModule( { code:this.srcFragment } ), 
+                targets     : [ { format : Context.format } ]
+            },
+            primitive   : { 
+                topology    : this.drawMode, 
+                cullMode    : this.culling, 
+                frontFace   : this.winding,
+            },
+        }
+
+        this.resource = Context.renderPipeline( props );
+        return this;
+    }
+}
 // #endregion
 
 </script>

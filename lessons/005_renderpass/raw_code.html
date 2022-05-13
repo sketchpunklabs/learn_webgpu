@@ -1,0 +1,193 @@
+<!DOCTYPE html><html><head><title></title>
+<meta http-equiv="origin-trial" content="AjPwILqou86MNqXlfZc0tZycsl9U9sV/uI2ti0RK1/w0kT3/l35O3zugkEb31z1gKbxnakvZahtfWf9h42buSA4AAABJeyJvcmlnaW4iOiJodHRwOi8vbG9jYWxob3N0OjMwMDAiLCJmZWF0dXJlIjoiV2ViR1BVIiwiZXhwaXJ5IjoxNjYzNzE4Mzk5fQ=="/>
+</head><body><script type="module">
+
+async function Init(){
+    if( !navigator.gpu ){ alert( 'WebGPU Not Available' ); return; }
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    const [ canvas, ctx ]               = initCanvas( 400, 400 );
+    const [ adapter, device, format ]   = await initContext( canvas, ctx );
+
+    const [ bufVerts, rawVerts ]        = createGeometryBuffer( device );
+    const pipeline                      = createPipeline( device, format );
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Get the screen's texture buffer
+    const texScreen         = ctx.getCurrentTexture().createView();
+    const renderPassDesc    = {
+        colorAttachments : [{
+            view        : texScreen, 
+            clearValue  : { r:0, g:0, b:0, a:1 },
+            loadOp      : 'clear',
+            storeOp     : 'store',
+        }]
+    };
+
+    const cmdEncode  = device.createCommandEncoder();
+    const renderPass = cmdEncode.beginRenderPass( renderPassDesc );
+    
+    // Bind Shader
+    renderPass.setPipeline( pipeline );
+
+    // RELATED TO SHADER :: @location(0) pos : vec3<f32>;
+    renderPass.setVertexBuffer( 0, bufVerts );
+
+    // Element Count = total_floats / 3_float_components_xyz
+    renderPass.draw( rawVerts.length / 3 );
+    
+    // Close Encoder and send it to be executed
+    renderPass.end();
+    device.queue.submit( [ cmdEncode.finish() ] );
+}
+
+window.addEventListener( 'load', Init );
+
+
+// #region CANVAS & CONTEXT
+function initCanvas( width=400, height=400 ){
+    const canvas        = document.querySelector( 'canvas' );
+    const ctx           = canvas.getContext( 'webgpu' );
+    
+    const cssWidth      = 400;
+    const cssHeight     = 400;
+    const dpr           = window.devicePixelRatio || 1;
+
+    // Need to round, you can't have a fraction of a pixel, can you?
+    const deviceWidth   = Math.round( cssWidth * dpr );
+    const deviceHeight  = Math.round( cssHeight * dpr );
+
+    // Internally set with the right size
+    canvas.width        = deviceWidth;
+    canvas.height       = deviceHeight;
+
+    // Externally set with the right size
+    canvas.style.width  = cssWidth + 'px';
+    canvas.style.height = cssHeight + 'px';
+
+    return [ canvas, ctx ];
+}
+
+async function initContext( canvas, ctx ){
+    const adapter = await navigator.gpu.requestAdapter();
+    if( !adapter ){ alert( 'Unable to obtain webgpu adapter' ); return; }
+
+    const device = await adapter.requestDevice( { /* options */ } );
+    if( !device ){ alert( 'Unable to obtain webgpu device' ); return; }
+
+    // Set a callback to alert when device is no longer available
+    device.lost.then( info=>console.error( 'Device was lost.', info ) );
+
+    const format = ctx.getPreferredFormat( adapter );
+    ctx.configure({           
+        device                  : device, 
+        format                  : format, 
+        size                    : [ canvas.width, canvas.height ],
+        compositingAlphaMode    : 'opaque'
+    });
+
+    return [ adapter, device, format ];
+}
+
+function consoleLimits( adapter ){
+    console.log( '[[ WebGPU Limits ]]' );
+    for( let i in adapter.limits ){
+        console.log( `- ${i} : ${adapter.limits[i]}` );
+    }
+}
+// #endregion
+
+// #region SHADER / PIPELINE
+function createPipeline( device, format ){
+    const pipeline = device.createRenderPipeline({
+        label       : 'BasicShader',
+
+        primitive   : { topology: 'triangle-list', cullMode: 'back', frontFace:'ccw', },
+
+        vertex      : { 
+            entryPoint  : 'main', 
+            module      : device.createShaderModule( { code:VERT_SRC } ),
+            buffers     : [
+                { arrayStride : 3 * 4, 
+                attributes  : [
+                    { shaderLocation:0, format:'float32x3', offset:0 }
+                ]
+                },
+            ],
+        },
+
+        fragment    : { 
+            entryPoint  : 'main', 
+            module      : device.createShaderModule( { code:FRAG_SRC } ), 
+            targets     : [ { format : format } ] 
+        }
+    });
+
+    return pipeline;
+}
+
+const VERT_SRC = `
+struct FragOut{
+    @builtin(position) Position : vec4<f32>;
+}
+
+struct Attrib{
+    @location(0) pos : vec3<f32>;
+}
+
+@stage(vertex)
+fn main( attrib: Attrib ) -> FragOut {
+    var out: FragOut;
+    out.Position = vec4<f32>( attrib.pos, 1.0 );
+    return out;
+}`;
+
+const FRAG_SRC = `
+@stage(fragment)
+fn main() -> @location(0) vec4<f32> {
+    return vec4<f32>( 1.0, 1.0, 1.0, 1.0 );
+}`;
+
+// #endregion
+
+// #region BUFFERS / GEOMETRY
+function createGeometryBuffer( device ){
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Define out geometry ( mesh )
+    const vertices = new Float32Array( [ 0,0,0, 1,0,0, 0,1,0 ] );
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Define our Buffer
+    const isStatic = true;
+    const usage = ( isStatic )? 
+        GPUBufferUsage.VERTEX : 
+        GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST;
+
+    const props = {
+        size                : vertices.byteLength,  // vertices.length * Float32Array.BYTES_PER_ELEMENT,
+        usage               : usage,
+        mappedAtCreation    : true,
+    };
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Create buffer & push data to it
+    const buf = device.createBuffer( props );
+
+    new Float32Array( buf.getMappedRange() ).set( vertices );
+    buf.unmap();
+
+    return [ buf, vertices ];
+}
+// #endregion
+
+</script>
+<style>   
+    canvas { border:1px solid #505050; }
+    html, body{ margin:0px; padding:0px; width:100%; height:100%; }
+    body{ background-color: #1E1E1E; 
+        display:flex; flex-direction:column; 
+        align-items:center; justify-content: center;
+    }
+</style>
+<canvas id='pgCanvas'></canvas>
+</body></html>

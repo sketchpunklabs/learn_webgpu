@@ -6,4 +6,5 @@
 - [003 - Buffers](/lessons/003_buffers/index.md)
 - [004 - Pipeline](/lessons/004_pipeline/index.md)
 - [005 - Render Pass](/lessons/005_renderpass/index.md)
+- [References](/pages/references.md)
 - to be continued

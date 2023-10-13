@@ -1,0 +1,305 @@
+<!DOCTYPE html><html><head><title></title>
+</head><body><script type="module">
+
+// https://codelabs.developers.google.com/your-first-webgpu-app#2
+window.addEventListener( 'load', async ()=>{
+    const canvas = document.querySelector( 'canvas' );
+    wgpuInit( canvas )
+        .then( ref=>{
+            console.log( 'ready', ref );
+            setCanvasSize( ref.canvas, 512, 512 );
+            
+            const geo = createGeometry( ref );
+            // const geo = createGeometry2( ref );
+            const sh  = createShader( ref, GRID_SIZE, GRID_SIZE );
+
+            renderScene( ref, sh, geo )
+
+            // clearScene( ref )
+        }).catch( e=>console.error( 'MEH', e ) );
+});
+
+const GRID_SIZE = 32;
+
+async function wgpuInit( canvas ){
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    if( !navigator.gpu ) throw new Error( 'WebGPU not available' );
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // https://developer.mozilla.org/en-US/docs/Web/API/GPU/requestAdapter
+    const optAdapter = {
+        powerPreference         : 'low-power', // 'high-performance', // 
+        forceFallbackAdapter    : false, // Fallback Adapters are currently not supported in browsers
+    };
+
+    const adapter = await navigator.gpu.requestAdapter( optAdapter );
+    if( !adapter ) throw new Error( 'WebGPU adapter not found' );
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    const optDevice = {
+        label               : 'MyDevice',
+        defaultQueue        : { label : 'MyQueue' },
+        requiredFeatures    : [],
+        requiredLimits      : {
+            maxBindGroups : 4,
+        },
+    };
+
+    const device = await adapter.requestDevice( optDevice );
+    if( !device ) throw new Error( 'WebGPU device not found' );
+
+    device.lost.then( e=>console.log( 'WebGPU Device is lost', e.message, e.reason ) );
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // https://developer.mozilla.org/en-US/docs/Web/API/GPUCanvasContext/configure
+    const context = canvas.getContext( 'webgpu' );
+    const format  = navigator.gpu.getPreferredCanvasFormat();
+
+    context.configure({
+        device,
+        format,
+        alphaMode   : 'opaque', // premultiplied
+        colorSpace  : 'srgb', // display-p3
+    });
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    return { device, adapter, format, context, canvas };
+}
+
+function setCanvasSize( c, w, h ){
+    const dpr       = window.devicePixelRatio || 1;
+
+    // Internally set with the size
+    // Need to round, you can't have a fraction of a pixel, can you?
+    c.width         = Math.round( w * dpr );
+    c.height        = Math.round( h * dpr );
+
+    // Externally set with the size
+    c.style.width   = w + 'px';
+    c.style.height  = h + 'px';
+}
+
+function clearScene( ref ){
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    const encoder = ref.device.createCommandEncoder();
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // https://developer.mozilla.org/en-US/docs/Web/API/GPUCommandEncoder/beginRenderPass
+    // https://developer.mozilla.org/en-US/docs/Web/API/GPUTexture/createView
+    const pass    = encoder.beginRenderPass({
+        label           : 'MainPass',
+        colorAttachments    : [{
+            view        : ref.context.getCurrentTexture().createView({ aspect: 'all' }), // Set next frame buffer
+            clearValue  : [ 0.2, 0.2, 0.2, 1.0 ],
+            loadOp      : 'clear',  // Clear texture on start
+            storeOp     : 'store',  // Save results of draw calls to texture
+        }]
+    });
+
+    pass.end();
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // const commandBuffer = encoder.finish();
+    // ref.device.queue.submit( [ commandBuffer ] );
+    // OR
+    ref.device.queue.submit( [ encoder.finish() ] );
+}
+
+
+function renderScene( ref, sh, geo ){
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    const encoder = ref.device.createCommandEncoder();
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    const pass    = encoder.beginRenderPass({
+        label           : 'MainPass',
+        colorAttachments    : [{
+            view        : ref.context.getCurrentTexture().createView({ aspect: 'all' }), // Set next frame buffer
+            clearValue  : [ 0.2, 0.2, 0.2, 1.0 ],
+            loadOp      : 'clear',  // Clear texture on start
+            storeOp     : 'store',  // Save results of draw calls to texture
+        }]
+    });
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    pass.setPipeline( sh.pipe );
+    pass.setVertexBuffer( geo.position.loc, geo.position.buf );
+    pass.setBindGroup( sh.bgLoc, sh.bindGroup );
+    pass.draw( geo.count, GRID_SIZE*GRID_SIZE ); // Add Instance Count
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    pass.end();
+    ref.device.queue.submit( [ encoder.finish() ] );
+}
+
+
+// Default Way
+function createGeometry( ref ){
+    const vertices = new Float32Array([
+        -0.8, -0.8, 0.8, -0.8, 0.8,  0.8,
+        -0.8, -0.8, 0.8,  0.8,  -0.8,  0.8,
+    ]);
+
+    // https://developer.mozilla.org/en-US/docs/Web/API/GPUDevice/createBuffer
+    // https://developer.mozilla.org/en-US/docs/Web/API/GPUBuffer/usage
+    // https://toji.dev/webgpu-best-practices/buffer-uploads 
+    const buf = ref.device.createBuffer({
+        label   : 'Vertices',
+        size    : vertices.byteLength,
+        usage   : GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST, // COPY_DST is needed for writebuffer
+    });
+
+    // ref.device.queue.writeBuffer( buf, 0, vertices ); // Write all
+    ref.device.queue.writeBuffer( buf, 0, vertices, 0, vertices.Length ); // Write Range
+
+    return {
+        count       : vertices.length / 2,
+        position    : { buf, loc:0 },
+    };
+}
+
+// Good for static meshes & data already not in a type array
+function createGeometry2( ref ){
+    const vertices = [
+        -0.8, -0.8, 0.8, -0.8, 0.8,  0.8,
+        -0.8, -0.8, 0.8,  0.8, -0.8,  0.8,
+    ];
+
+    // https://toji.dev/webgpu-best-practices/buffer-uploads 
+    const buf = ref.device.createBuffer({
+        label               : 'Vertices',
+        size                : vertices.length * 4,
+        usage               : GPUBufferUsage.VERTEX,
+        mappedAtCreation    : true,
+    });
+
+    const tAry = new Float32Array( buf.getMappedRange() );
+    tAry.set( vertices );
+    buf.unmap();
+
+    return {
+        count       : vertices.length / 2,
+        position    : { buf, loc:0 },
+    };
+}
+
+function vertexFBufferLayout( comLen=2, shaderLoc=0 ){
+    return {
+        arrayStride     : comLen * 4,       // How big in bytes is one VectorN
+        attributes      : [{
+            format          : 'float32x' + comLen,
+            offset          : 0,         // Only matters when dealing with interlaced data
+            shaderLocation  : shaderLoc, // Attribute index in vertex shader, its location/position
+        }],
+    }
+}
+
+function createShader( ref, xSize=4, ySize=4 ){
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    const uniformData = new Float32Array( [xSize,ySize] );
+    const uniformBuf  = ref.device.createBuffer({
+        label   : 'ShaderUBO',
+        size    : uniformData.byteLength,
+        usage   : GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+
+    ref.device.queue.writeBuffer( uniformBuf, 0, uniformData );
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // https://developer.mozilla.org/en-US/docs/Web/API/GPUDevice/createShaderModule
+    const mod = ref.device.createShaderModule({
+        label   : 'MyShader',
+        code    : `
+            struct VertexInput{
+                @location(0) pos: vec2f,
+                @builtin( instance_index ) inst: u32,
+            }
+
+            struct VertexOutput{
+                @builtin(position) pos: vec4f,
+                @location(0) cell: vec2f,
+            }
+
+            @group(0) @binding(0) var<uniform> grid: vec2f;
+
+            @vertex
+            fn vMain( in: VertexInput ) -> VertexOutput {
+                //var gPos = (pos + 1) / grid; // let == const in js, var == let/var in js
+                //gPos -= 1; // Cause 0,0 to be at bottom-left corner
+
+                let i       = f32( in.inst );
+                // let cell    = vec2f( i, i );
+                let cell    = vec2f(
+                    i % grid.x,
+                    floor( i / grid.x )
+                );
+
+                let cOffset = cell / grid * 2;
+                let gPos    = ( in.pos + 1 ) / grid - 1 + cOffset;
+
+                var out: VertexOutput;
+                out.pos     = vec4f( gPos, 0, 1 );
+                out.cell    = cell;
+                return out;
+            }
+
+            @fragment
+            fn fMain( in: VertexOutput ) -> @location(0) vec4f{
+                let c = in.cell / grid;
+                return vec4f( c, 1-c.x, 1 ); // Set B to the inverse of R
+            }
+
+            // fn fMain( @location(0) cell: vec2f ) -> @location(0) vec4f{
+            //     return vec4f( cell, 0, 1 );
+            // }
+        `,
+    });
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // https://developer.mozilla.org/en-US/docs/Web/API/GPUDevice/createRenderPipeline
+    const pipe = ref.device.createRenderPipeline({
+        label       : 'MyPipeline',
+        layout      : 'auto',   // If auto, the bindgroup is locked to this popeline
+        
+        primitive   : {
+            topology    : 'triangle-list',
+        },
+
+        vertex      : {
+            module      : mod,
+            entryPoint  : 'vMain',
+            buffers     : [ vertexFBufferLayout( 2, 0 ) ]
+        },
+
+        fragment    : {
+            module      : mod,
+            entryPoint  : 'fMain',
+            targets     : [ { format: ref.format }],
+        },
+    });
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // https://developer.mozilla.org/en-US/docs/Web/API/GPUDevice/createBindGroup
+    // Since we have layout auto generate, we need to request the layout from the pipe
+    // The bindgroup is immutable, can't not change the Reference to the buffer after being created.
+    const bindGroup = ref.device.createBindGroup({
+        label   : 'ShaderUBOBindGroup',
+        layout  : pipe.getBindGroupLayout(0),
+        entries : [
+            { binding: 0, resource: { buffer: uniformBuf } },
+        ],
+    });
+
+    return { pipe, bgLoc:0, bindGroup, uniformBuf, uniformData };
+}
+</script>
+<style>   
+   canvas { border:1px solid #505050; }
+   html, body{ margin:0px; padding:0px; width:100%; height:100%; }
+   body{ background-color: #1E1E1E; 
+       display:flex; flex-direction:column; 
+       align-items:center; justify-content: center;
+   }
+</style>
+<canvas id='pgCanvas' width="512" height="512"></canvas>
+</body></html>

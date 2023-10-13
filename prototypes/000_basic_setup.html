@@ -1,0 +1,123 @@
+<!DOCTYPE html><html><head><title></title>
+</head><body><script type="module">
+
+// https://codelabs.developers.google.com/your-first-webgpu-app#2
+window.addEventListener( 'load', async ()=>{
+    const canvas = document.querySelector( 'canvas' );
+    wgpuInit( canvas )
+        .then( ref=>{
+            console.log( 'ready', ref );
+            setCanvasSize( ref.canvas, 512, 512 );
+            clearScene( ref );
+        }).catch( e=>console.error( 'MEH', e ) );
+});
+
+async function wgpuInit( canvas ){
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    if( !navigator.gpu ) throw new Error( 'WebGPU not available' );
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // https://developer.mozilla.org/en-US/docs/Web/API/GPU/requestAdapter
+    const optAdapter = {
+        powerPreference         : 'low-power', // 'high-performance', // 
+        forceFallbackAdapter    : false, // Fallback Adapters are currently not supported in browsers
+    };
+
+    const adapter = await navigator.gpu.requestAdapter( optAdapter );
+    if( !adapter ) throw new Error( 'WebGPU adapter not found' );
+
+    console.log( 'Available Features' )
+    for( const f of adapter.features.keys() ) console.log( '- ', f );
+
+    console.log( "Has texture-compression-bc?", adapter.features.has( 'texture-compression-bc' ) );
+
+    console.log( 'Available Limits' );
+    for( const k in adapter.limits ) console.log( '- ', k, ' : ', adapter.limits[ k ] );
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // https://developer.mozilla.org/en-US/docs/Web/API/GPUAdapter/requestDevice
+    // https://developer.mozilla.org/en-US/docs/Web/API/GPUSupportedFeatures
+    // https://developer.mozilla.org/en-US/docs/Web/API/GPUSupportedLimits
+    // https://gpuweb.github.io/gpuweb/#feature-index
+    // https://developer.mozilla.org/en-US/docs/Web/API/GPUDeviceLostInfo
+    const optDevice = {
+        label               : 'MyDevice',
+        defaultQueue        : { label : 'MyQueue' },
+        requiredFeatures    : [],
+        requiredLimits      : {
+            maxBindGroups : 4,
+        },
+    };
+
+    const device = await adapter.requestDevice( optDevice );
+    if( !device ) throw new Error( 'WebGPU device not found' );
+    console.log( device );
+
+    device.lost.then( e=>console.log( 'WebGPU Device is lost', e.message, e.reason ) );
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // https://developer.mozilla.org/en-US/docs/Web/API/GPUCanvasContext/configure
+    const context = canvas.getContext( 'webgpu' );
+    const format  = navigator.gpu.getPreferredCanvasFormat();
+
+    context.configure({
+        device,
+        format,
+        alphaMode   : 'opaque', // premultiplied
+        colorSpace  : 'srgb', // display-p3
+    });
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    return { device, adapter, format, context, canvas };
+}
+
+function setCanvasSize( c, w, h ){
+    const dpr       = window.devicePixelRatio || 1;
+
+    // Internally set with the size, the true buffer size for rendering
+    // Need to round, you can't have a fraction of a pixel, can you?
+    c.width         = Math.round( w * dpr );
+    c.height        = Math.round( h * dpr );
+
+    // Externally set with the size, this is like the CSS Size
+    c.style.width   = w + 'px';
+    c.style.height  = h + 'px';
+}
+
+function clearScene( ref ){
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    const encoder = ref.device.createCommandEncoder();
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // https://developer.mozilla.org/en-US/docs/Web/API/GPUCommandEncoder/beginRenderPass
+    // https://developer.mozilla.org/en-US/docs/Web/API/GPUTexture/createView
+    const pass    = encoder.beginRenderPass({
+        label           : 'MainPass',
+        colorAttachments    : [{
+            view        : ref.context.getCurrentTexture().createView({ aspect: 'all' }), // Set next frame buffer
+            clearValue  : [ 0.2, 0.2, 0.2, 1.0 ],
+            loadOp      : 'clear',  // Clear texture on start
+            storeOp     : 'store',  // Save results of draw calls to texture
+        }]
+    });
+
+    pass.end();
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // const commandBuffer = encoder.finish();
+    // ref.device.queue.submit( [ commandBuffer ] );
+    // OR
+    ref.device.queue.submit( [ encoder.finish() ] );
+}
+
+</script>
+<style>   
+   canvas { border:1px solid #505050; }
+   html, body{ margin:0px; padding:0px; width:100%; height:100%; }
+   body{ background-color: #1E1E1E; 
+       display:flex; flex-direction:column; 
+       align-items:center; justify-content: center;
+   }
+</style>
+<canvas id='pgCanvas' width="512" height="512"></canvas>
+</body></html>

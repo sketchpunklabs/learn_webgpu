@@ -1,0 +1,459 @@
+<!DOCTYPE html><html><head><title></title>
+</head><body><script type="module">
+
+const Ref = {};
+
+// https://codelabs.developers.google.com/your-first-webgpu-app#2
+window.addEventListener( 'load', async ()=>{
+    const canvas = document.querySelector( 'canvas' );
+    wgpuInit( canvas )
+        .then( ref=>{
+            console.log( 'ready', ref );
+            // setCanvasSize( ref.canvas, 512, 512 );
+            setCanvasSize( ref.canvas, 255, 255 );
+            
+            const geo = createGeometry( ref );
+            const layout = createSharedLayout( ref );
+            const sh  = createShader( ref, layout, GRID_SIZE, GRID_SIZE );
+            const com = createCompute( ref, sh.pLayout );
+
+            Ref.geo = geo;
+            Ref.sh  = sh;
+            Ref.wg  = ref;
+            Ref.com = com;
+
+            // renderScene( ref, sh, geo );
+            // renderLoop();
+            setInterval( renderLoop, INTERVAL );
+
+            // clearScene( ref )
+        }).catch( e=>console.error( 'MEH', e ) );
+});
+
+const GRID_SIZE  = 32;
+const INTERVAL   = 1000;
+const WORKGROUP  = 8;
+let steps        = 0;
+
+function renderLoop(){
+    const wg      = Ref.wg;
+    const sh      = Ref.sh;
+    const geo     = Ref.geo;
+    const com     = Ref.com;
+    const groups  = [ Ref.sh.bindGroupA, Ref.sh.bindGroupB ];
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    const encoder = wg.device.createCommandEncoder();
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    const cpass = encoder.beginComputePass();
+
+    cpass.setPipeline( com.pipe );
+    cpass.setBindGroup( 0, groups[ steps % 2 ] );
+
+    // Execute the shader 32x32 times but workgroup is 8x8
+    // That means we only need to dispatch the compute shader 4x4 times
+    // Better to round up to keep things even BUT that means in the compute
+    // shader we need to test global_invocation_id if within the storage limit & exit early if it does
+    const cnt = Math.ceil( GRID_SIZE / WORKGROUP );
+    cpass.dispatchWorkgroups( cnt, cnt );
+
+    cpass.end();
+
+    steps++; // Read from A & Write to B, Step so Render from B
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    const pass = encoder.beginRenderPass({
+        label           : 'MainPass',
+        colorAttachments    : [{
+            view        : wg.context.getCurrentTexture().createView(),
+            clearValue  : [ 0.2, 0.2, 0.2, 1.0 ],
+            loadOp      : 'clear',
+            storeOp     : 'store',
+        }]
+    });
+
+    pass.setPipeline( sh.pipe );
+    pass.setBindGroup( 0, groups[ steps % 2 ] );
+    pass.setVertexBuffer( geo.position.loc, geo.position.buf );
+    pass.draw( geo.count, GRID_SIZE*GRID_SIZE ); // Add Instance Count
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    pass.end();
+    wg.device.queue.submit( [ encoder.finish() ] );
+}
+
+async function wgpuInit( canvas ){
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    if( !navigator.gpu ) throw new Error( 'WebGPU not available' );
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // https://developer.mozilla.org/en-US/docs/Web/API/GPU/requestAdapter
+    const optAdapter = {
+        powerPreference         : 'low-power', // 'high-performance', // 
+        forceFallbackAdapter    : false, // Fallback Adapters are currently not supported in browsers
+    };
+
+    const adapter = await navigator.gpu.requestAdapter( optAdapter );
+    if( !adapter ) throw new Error( 'WebGPU adapter not found' );
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    const optDevice = {
+        label               : 'MyDevice',
+        defaultQueue        : { label : 'MyQueue' },
+        requiredFeatures    : [],
+        requiredLimits      : {
+            maxBindGroups : 4,
+        },
+    };
+
+    const device = await adapter.requestDevice( optDevice );
+    if( !device ) throw new Error( 'WebGPU device not found' );
+
+    device.lost.then( e=>console.log( 'WebGPU Device is lost', e.message, e.reason ) );
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // https://developer.mozilla.org/en-US/docs/Web/API/GPUCanvasContext/configure
+    const context = canvas.getContext( 'webgpu' );
+    const format  = navigator.gpu.getPreferredCanvasFormat();
+
+    context.configure({
+        device,
+        format,
+        alphaMode   : 'opaque', // premultiplied
+        colorSpace  : 'srgb', // display-p3
+    });
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    return { device, adapter, format, context, canvas };
+}
+
+function setCanvasSize( c, w, h ){
+    const dpr       = window.devicePixelRatio || 1;
+
+    // Internally set with the size
+    // Need to round, you can't have a fraction of a pixel, can you?
+    c.width         = Math.round( w * dpr );
+    c.height        = Math.round( h * dpr );
+
+    // Externally set with the size
+    c.style.width   = w + 'px';
+    c.style.height  = h + 'px';
+}
+
+function renderScene( ref, sh, geo ){
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    const encoder = ref.device.createCommandEncoder();
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    const pass    = encoder.beginRenderPass({
+        label           : 'MainPass',
+        colorAttachments    : [{
+            view        : ref.context.getCurrentTexture().createView({ aspect: 'all' }), // Set next frame buffer
+            clearValue  : [ 0.2, 0.2, 0.2, 1.0 ],
+            loadOp      : 'clear',  // Clear texture on start
+            storeOp     : 'store',  // Save results of draw calls to texture
+        }]
+    });
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    pass.setPipeline( sh.pipe );
+    pass.setVertexBuffer( geo.position.loc, geo.position.buf );
+    pass.setBindGroup( sh.bgLoc, sh.bindGroupA );
+    pass.draw( geo.count, GRID_SIZE*GRID_SIZE ); // Add Instance Count
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    pass.end();
+    ref.device.queue.submit( [ encoder.finish() ] );
+}
+
+
+function createGeometry( ref ){
+    const vertices = new Float32Array([
+        -0.8, -0.8, 0.8, -0.8, 0.8,  0.8,
+        -0.8, -0.8, 0.8,  0.8,  -0.8,  0.8,
+    ]);
+
+    // https://developer.mozilla.org/en-US/docs/Web/API/GPUDevice/createBuffer
+    // https://developer.mozilla.org/en-US/docs/Web/API/GPUBuffer/usage
+    // https://toji.dev/webgpu-best-practices/buffer-uploads 
+    const buf = ref.device.createBuffer({
+        label   : 'Vertices',
+        size    : vertices.byteLength,
+        usage   : GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST, // COPY_DST is needed for writebuffer
+    });
+
+    // ref.device.queue.writeBuffer( buf, 0, vertices ); // Write all
+    ref.device.queue.writeBuffer( buf, 0, vertices, 0, vertices.Length ); // Write Range
+
+    return {
+        count       : vertices.length / 2,
+        position    : { buf, loc:0 },
+    };
+}
+
+function vertexFBufferLayout( comLen=2, shaderLoc=0 ){
+    return {
+        arrayStride     : comLen * 4,       // How big in bytes is one VectorN
+        attributes      : [{
+            format          : 'float32x' + comLen,
+            offset          : 0,         // Only matters when dealing with interlaced data
+            shaderLocation  : shaderLoc, // Attribute index in vertex shader, its location/position
+        }],
+    }
+}
+
+function createShader( ref, layout, xSize=4, ySize=4 ){
+    console.log( layout );
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    const cellData = new Uint32Array( GRID_SIZE * GRID_SIZE );
+    
+    const cellBufA  = ref.device.createBuffer( {
+        label   : 'CellStateA',
+        size    : cellData.byteLength,
+        usage   : GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    } );
+
+    const cellBufB  = ref.device.createBuffer( {
+        label   : 'CellStateB',
+        size    : cellData.byteLength,
+        usage   : GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    } );
+
+    for( let i=0; i < cellData.length; i++ ){ 
+        cellData[ i ] = ( Math.random() > 0.6 )? 1 : 0;  
+    }
+        
+    ref.device.queue.writeBuffer( cellBufA, 0, cellData );
+    ref.device.queue.writeBuffer( cellBufB, 0, cellData );
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    const uniformData = new Float32Array( [xSize,ySize] );
+    const uniformBuf  = ref.device.createBuffer({
+        label   : 'ShaderUBO',
+        size    : uniformData.byteLength,
+        usage   : GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+
+    ref.device.queue.writeBuffer( uniformBuf, 0, uniformData );
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // https://developer.mozilla.org/en-US/docs/Web/API/GPUDevice/createShaderModule
+    const mod = ref.device.createShaderModule({
+        label   : 'MyShader',
+        code    : `
+            struct VertexInput{
+                @location(0) pos: vec2f,
+                @builtin( instance_index ) inst: u32,
+            }
+
+            struct VertexOutput{
+                @builtin(position) pos: vec4f,
+                @location(0) cell: vec2f,
+            }
+
+            @group(0) @binding(0) var<uniform> grid: vec2f;
+            @group(0) @binding(1) var<storage> cellState: array<u32>;
+
+            @vertex
+            fn vMain( in: VertexInput ) -> VertexOutput {
+                let i       = f32( in.inst );
+                let cell    = vec2f(
+                    i % grid.x,
+                    floor( i / grid.x )
+                );
+
+                let state   = f32( cellState[ in.inst ] );
+
+                let cOffset = cell / grid * 2;
+                let gPos    = ( (in.pos * state) + 1 ) / grid - 1 + cOffset;
+
+                var out: VertexOutput;
+                out.pos     = vec4f( gPos, 0, 1 );
+                out.cell    = cell;
+                return out;
+            }
+
+            @fragment
+            fn fMain( in: VertexOutput ) -> @location(0) vec4f{
+                let c = in.cell / grid;
+                return vec4f( c, 1-c.x, 1 ); // Set B to the inverse of R
+            }
+
+            // fn fMain( @location(0) cell: vec2f ) -> @location(0) vec4f{
+            //     return vec4f( cell, 0, 1 );
+            // }
+        `,
+    });
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // https://developer.mozilla.org/en-US/docs/Web/API/GPUDevice/createRenderPipeline
+
+    const pLayout = ref.device.createPipelineLayout({
+        label            : 'Pipeline Layout',
+        bindGroupLayouts : [ layout ],
+    });
+
+    const pipe = ref.device.createRenderPipeline({
+        label       : 'MyPipeline',
+        layout      : pLayout,
+        
+        primitive   : {
+            topology    : 'triangle-list',
+        },
+
+        vertex      : {
+            module      : mod,
+            entryPoint  : 'vMain',
+            buffers     : [ vertexFBufferLayout( 2, 0 ) ]
+        },
+
+        fragment    : {
+            module      : mod,
+            entryPoint  : 'fMain',
+            targets     : [ { format: ref.format }],
+        },
+    });
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // https://developer.mozilla.org/en-US/docs/Web/API/GPUDevice/createBindGroup
+    // Since we have layout auto generate, we need to request the layout from the pipe
+    // The bindgroup is immutable, can't not change the Reference to the buffer after being created.
+    const bindGroupA = ref.device.createBindGroup({
+        label   : 'ShaderUBOBindGroupA',
+        layout  : layout,
+        entries : [
+            { binding: 0, resource: { buffer: uniformBuf } },
+            { binding: 1, resource: { buffer: cellBufA } },
+            { binding: 2, resource: { buffer: cellBufB } },
+        ],
+    });
+
+    const bindGroupB = ref.device.createBindGroup({
+        label   : 'ShaderUBOBindGroupA',
+        layout  : layout,
+        entries : [
+            { binding: 0, resource: { buffer: uniformBuf } },
+            { binding: 1, resource: { buffer: cellBufB } },
+            { binding: 2, resource: { buffer: cellBufA } },
+        ],
+    });
+
+    return { pipe, bgLoc:0, pLayout, bindGroupA, bindGroupB, uniformBuf, uniformData };
+}
+
+function createCompute( ref, layout ){
+    // Workgroup size tells how to execute the code in a grid fashion
+    // So the side of work is (8x8x1), when any comp is omitted, its 1
+    const mod = ref.device.createShaderModule({
+        label   : 'ComputeShader',
+        code    : `
+            @group(0) @binding(0) var<uniform> grid: vec2f;
+                
+            @group(0) @binding(1) var<storage> in   : array<u32>;
+            @group(0) @binding(2) var<storage,read_write> out  : array<u32>;
+
+            fn cellIdx( cell: vec2i ) -> u32{
+                // return u32( cell.y * i32( grid.x ) + cell.x );
+                let iGrid = vec2i( grid );
+                return u32( 
+                    ( cell.y % iGrid.x ) * iGrid.x + 
+                    ( cell.x % iGrid.x )
+                );
+            }
+
+            // 8 direction around a cell
+            const a = vec2i(  1, 1 );
+            const b = vec2i(  0, 1 );
+            const c = vec2i( -1, 1 );
+
+            const d = vec2i(  1, 0 );
+            const e = vec2i( -1, 0 );
+
+            const f = vec2i(  1, 1 );
+            const g = vec2i(  0, 1 );
+            const h = vec2i( -1, 1 );
+
+            @compute
+            @workgroup_size( ${WORKGROUP}, ${WORKGROUP} )
+            fn main(
+                @builtin( global_invocation_id ) cell: vec3u,
+            ){    
+                // Make sure we are not going over the storage limit
+                if( cell.x >= u32(grid.x) && cell.y >= u32(grid.y) ){
+                    return;
+                }
+
+                let iCell       = vec2i( cell.xy );
+                let ii          = cellIdx( iCell );
+                let neighborCnt = 
+                    in[ cellIdx( iCell.xy + a ) ] +
+                    in[ cellIdx( iCell.xy + b ) ] +
+                    in[ cellIdx( iCell.xy + c ) ] +
+                    in[ cellIdx( iCell.xy + d ) ] +
+                    in[ cellIdx( iCell.xy + e ) ] +
+                    in[ cellIdx( iCell.xy + f ) ] +
+                    in[ cellIdx( iCell.xy + g ) ] +
+                    in[ cellIdx( iCell.xy + h ) ];
+                
+                switch( neighborCnt ){
+                    case 2:  { out[ ii ] = in[ ii ]; }  // If only two people, keep the same state
+                    case 3:  { out[ ii ] = 1; }         // if 3, becomes active
+                    default: { out[ ii ] = 0; }         // if not, off
+                }
+            }
+        `,
+    });
+
+    const pipe = ref.device.createComputePipeline({
+        label   : 'ComputeShader',
+        layout  : layout,
+        compute : {
+            module      : mod,
+            entryPoint  : 'main',
+        },
+    });
+
+    return { pipe };
+}
+
+function createSharedLayout( ref ){
+    const layout = ref.device.createBindGroupLayout({
+        label   : 'SharedLayout',
+        entries : [
+
+            {
+                binding     : 0,
+                visibility  : GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
+                buffer      : { type:'uniform' }, // GRID UBO
+            },
+
+            {
+                binding     : 1,
+                visibility  : GPUShaderStage.VERTEX | GPUShaderStage.COMPUTE,
+                buffer      : { type: 'read-only-storage' },
+            },
+
+            {
+                binding     : 2,
+                visibility  : GPUShaderStage.COMPUTE,
+                buffer      : { type: 'storage' },
+            },
+
+        ],
+    })
+
+    return layout;
+}
+
+</script>
+<style>   
+   canvas { border:1px solid #505050; }
+   html, body{ margin:0px; padding:0px; width:100%; height:100%; }
+   body{ background-color: #1E1E1E; 
+       display:flex; flex-direction:column; 
+       align-items:center; justify-content: center;
+   }
+</style>
+<canvas id='pgCanvas' width="512" height="512"></canvas>
+</body></html>

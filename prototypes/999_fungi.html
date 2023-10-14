@@ -1,0 +1,93 @@
+<!DOCTYPE html><html><head><title></title>
+</head><body><script type="module">
+
+// window.addEventListener( 'load', async ()=>{
+//     const canvas = document.querySelector( 'canvas' );
+
+//     // Fungi.useWebGPU( canvas ).then( isReady=>console.log( isReady ) );
+//     Fungi.useWebGL2( canvas ).then( isReady=>console.log( isReady ) );
+
+    
+// });
+
+import Fungi from './lib/Fungi.js';
+
+Fungi.ready( { api:'webgl2' } )
+    .catch( err=>console.error( err ) )    
+    .then( ()=>{
+        
+        // const vBuf = new VertexBuffer().set( new Float32Array([0,1,2]) ); // Typed Data
+        // const vBuf = new VertexBuffer().set( [0,1,2] );  // Non-typed
+        const vBuf = new VertexBuffer().set( 3*4 );  // Allocate only in bytes
+        console.log( vBuf );
+
+        vBuf.dispose();
+
+    });
+
+class VertexBuffer{
+    gRef        = null;         // GPU Reference
+    loc         = 0;            // Attribute Location
+    type        = Fungi.VERTEX; // What Type of buffer is it
+    dataType    = Fungi.FLOAT;  // Data Type
+    components  = 3;            // How many components, 3 If Vec3, etc
+    compacity   = 0;            // Total byte size of buffer
+    size        = 0;            // Currently used bytes
+    isStatic    = true;         // WebGL2: Is the buffer going to be updated often
+
+    constructor( dType=Fungi.FLOAT, comLen=3, isStatic=true ){
+        this.dataType   = dType
+        this.components = comLen;
+        this.isStatic   = isStatic;
+    }
+
+    // TODO: Allow rewriting buffers or replacing with bigger ones
+    set( data ){
+        if( !this.gRef ) Fungi.api.createBuffer( data, this );
+        return this;
+    }
+
+    dispose(){
+        if( this.gRef ){
+            Fungi.api.deleteBuffer( this.gRef );
+            this.gRef = null;
+        }
+    }
+}
+
+
+class Geometry{
+    attributes = {};
+    constructor( props={} ){
+        const p = {
+            index:[],
+            position:[], //0
+            normal:[], // 1
+            uv:[], // 2
+            color:[], // 3
+            joints:[], // 4
+            weights:[], // 5
+        }
+
+    }
+
+    // #region Standard Attributes
+    usePosition(){
+        this.attributes[ 'position' ] = new VertexBuffer( data, comLen );
+        return this;
+    }
+
+    // #endregion
+}
+
+</script>
+<style>   
+   canvas { border:1px solid #505050; }
+   html, body{ margin:0px; padding:0px; width:100%; height:100%; }
+   body{ background-color: #1E1E1E; 
+       display:flex; flex-direction:column; 
+       align-items:center; justify-content: center;
+   }
+</style>
+<canvas id='pgCanvas' width="512" height="512"></canvas>
+</body></html>

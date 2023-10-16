@@ -2,6 +2,7 @@ import Fungi from './Fungi.js';
 
 export default class WebGL2{
     // #region MAIN
+    name    = 'webgl2';
     canvas  = null;
     context = null;
 
@@ -49,16 +50,16 @@ export default class WebGL2{
     // #region BUFFERS
     deleteBuffer( ref ){ this.context.deleteBuffer( ref ); }
 
-    createBuffer( data, obj ){
+    createBuffer( data, bufType, dataType=Fungi.FLOAT, isStatic=true ){
         // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         // What type of buffer is it
         let bType;
-        switch( obj.type ){
-            case Fungi.VERTEX   : bType = this.context.ARRAY_BUFFER; break;
-            case Fungi.ELEMENT  : bType = this.context.ELEMENT_ARRAY_BUFFER; break;
-            case Fungi.UNIFORM  : bType = this.context.UNIFORM_BUFFER; break;
+        switch( bufType ){
+            case Fungi.VERTEX   : bType = WebGLRenderingContext.ARRAY_BUFFER; break;
+            case Fungi.ELEMENT  : bType = WebGLRenderingContext.ELEMENT_ARRAY_BUFFER; break;
+            case Fungi.UNIFORM  : bType = WebGLRenderingContext.UNIFORM_BUFFER; break;
             default:{
-                console.log( 'UNKNOWN BUFFER TYPE', obj.type );
+                console.log( 'UNKNOWN BUFFER TYPE', bufType );
                 break;
             }
         }
@@ -70,7 +71,7 @@ export default class WebGL2{
             content = data;
         }else if( Array.isArray( data ) ){
             // Content MUST be a TypedArray, create one now
-            switch( obj.dataType ){
+            switch( dataType ){
                 case Fungi.FLOAT : content = new Float32Array( data ); break;
                 default:{
                     console.log( 'UNKNOWN DATA TYPE FOR TypeARRAY CONVERSION' );
@@ -82,22 +83,42 @@ export default class WebGL2{
 
         // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         // Create Buffer and push initial data if available
-        const usage = ( obj.isStatic )
-            ? this.context.STATIC_DRAW
-            : this.context.DYNAMIC_DRAW
-
-        obj.gRef = this.context.createBuffer();         // Create
+        const usage = ( isStatic )
+            ? WebGLRenderingContext.STATIC_DRAW
+            : WebGLRenderingContext.DYNAMIC_DRAW
+        
+        const obj = {
+            gRef : this.context.createBuffer(),
+            size : ( content )? content.byteLength : data,
+        }
+        
         this.context.bindBuffer( bType, obj.gRef );     // Set it as active
 
         if( content )   this.context.bufferData( bType, content, usage );   // Fill Buffer
         else            this.context.bufferData( bType, data, usage );      // Empty Buffer
 
         this.context.bindBuffer( bType, null );         // Deactivate
+        
+        return obj;
     }
     // #endregion
 }
 
 /*
+    case WebGLRenderingContext.BYTE: return `s${norm}8${x}`;
+    case WebGLRenderingContext.UNSIGNED_BYTE: return `u${norm}8${x}`;
+    case WebGLRenderingContext.SHORT: return `s${norm}16${x}`;
+    case WebGLRenderingContext.UNSIGNED_SHORT: return `u${norm}16${x}`;
+    case WebGLRenderingContext.UNSIGNED_INT: return `u${norm}32${x}`;
+    case WebGLRenderingContext.FLOAT: return `float32${x}`;
+
+    case WebGLRenderingContext.TRIANGLES: return 'triangle-list';
+    case WebGLRenderingContext.TRIANGLE_STRIP: return 'triangle-strip';
+    case WebGLRenderingContext.LINES: return 'line-list';
+    case WebGLRenderingContext.LINE_STRIP: return 'line-strip';
+    case WebGLRenderingContext.POINTS: return 'point-list';
+
+
 update_data( buf, type_ary ){
     let b_len = type_ary.byteLength;
     this.gl.ctx.bindBuffer( buf.type, buf.id );

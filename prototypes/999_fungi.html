@@ -2,58 +2,230 @@
 </head><body><script type="module">
 
 // window.addEventListener( 'load', async ()=>{
-//     const canvas = document.querySelector( 'canvas' );
-
+//     // const canvas = document.querySelector( 'canvas' );
 //     // Fungi.useWebGPU( canvas ).then( isReady=>console.log( isReady ) );
-//     Fungi.useWebGL2( canvas ).then( isReady=>console.log( isReady ) );
-
-    
+//     // Fungi.useWebGL2( canvas ).then( isReady=>console.log( isReady ) );
 // });
 
-import Fungi from './lib/Fungi.js';
+import Fungi            from './lib/Fungi.js';
+import VertexBuffer     from './lib/core/VertexBuffer.js';
+import UniformBuffer    from './lib/core/UniformBuffer.js';
 
-Fungi.ready( { api:'webgl2' } )
+Fungi.ready( { api:'webgpu' } )
     .catch( err=>console.error( err ) )    
-    .then( ()=>{
-        
+    .then( ()=>{        
         // const vBuf = new VertexBuffer().set( new Float32Array([0,1,2]) ); // Typed Data
         // const vBuf = new VertexBuffer().set( [0,1,2] );  // Non-typed
-        const vBuf = new VertexBuffer().set( 3*4 );  // Allocate only in bytes
-        console.log( vBuf );
+        // const vBuf = new VertexBuffer().set( 3*4 );  // Allocate only in bytes
+        // console.log( vBuf );
+        // vBuf.dispose();
 
-        vBuf.dispose();
+        const u = new UniformBuffer( [
+            { name:'v0', type:'vec2f', default:[1,2] },
+            { name:'v1', type:'f32',   default:3 },
+            { name:'v2', type:'vec3f', default:[4,5,6] }
+        ] );
+
+        u.view.v1 = 5;
+        u.view.v0 = [3,4];
+        u.view.v2 = [9,8,7];
+
+        console.log( new Float32Array( u.localBuf ), u.localBuf.byteLength );
+
+        console.log( u );
 
     });
 
-class VertexBuffer{
-    gRef        = null;         // GPU Reference
-    loc         = 0;            // Attribute Location
-    type        = Fungi.VERTEX; // What Type of buffer is it
-    dataType    = Fungi.FLOAT;  // Data Type
-    components  = 3;            // How many components, 3 If Vec3, etc
-    compacity   = 0;            // Total byte size of buffer
-    size        = 0;            // Currently used bytes
-    isStatic    = true;         // WebGL2: Is the buffer going to be updated often
+/*
+https://github.com/greggman/webgpu-utils
+- Create interleaved Data
+- Load Data Texture
+- Create MIPS
 
-    constructor( dType=Fungi.FLOAT, comLen=3, isStatic=true ){
-        this.dataType   = dType
-        this.components = comLen;
-        this.isStatic   = isStatic;
-    }
 
-    // TODO: Allow rewriting buffers or replacing with bigger ones
-    set( data ){
-        if( !this.gRef ) Fungi.api.createBuffer( data, this );
-        return this;
-    }
+BindGroups
+- How to bind Uniforms to a Shader
 
-    dispose(){
-        if( this.gRef ){
-            Fungi.api.deleteBuffer( this.gRef );
-            this.gRef = null;
+Geometry 
+- Holds Attribute Buffers
+- These get bound one bit at a time.
+
+Shader
+- Layout
+--- Attributes
+--- Uniforms / UBOs
+--- primitive type
+--- cullmode
+--- frontface ccw cw
+--- double sided
+--- Color Factor ( Blending )
+--- Alpha Factor ( Blending )
+- Uniforms
+--- Material ( color, textures, etc )
+--- Model ( Model & Normal Matrix )
+--- Global ( Perp & View Matrices, Time, Resolution, CameraWPos )
+--- Lighting
+
+* Shaders can be created with Vert&Frag together or as seperate Modules
+The idea is that the vert can be the same but frag changes often or vice versa.
+
+* Each material with hold its own UBO Bindgroup & Buffer for material uniform data
+
+* Uniform 
+    https://webgpufundamentals.org/webgpu/lessons/resources/wgsl-offset-computer.html
+    https://webgpufundamentals.org/webgpu/lessons/webgpu-memory-layout.html
+    https://github.com/greggman/webgpu-utils/blob/dev/src/buffer-views.ts#L24
+[
+    { name:'v0', type:'f32,i32,u32,vec3f,vec4f,vec2f,mat4x4f', default:x,[0,0,0] },
+    { name:'v1', type:vec3f}
+]
+
+
+passEncoder.setVertexBuffer(0, bi.buffers[0]);
+passEncoder.setIndexBuffer(bi.indexBuffer, bi.indexFormat);
+passEncoder.drawIndexed(bi.numElements);
+
+
+ const code = editor.getValue();
+    if (compileElem.checked && device) {
+      const module = device.createShaderModule({code}); // code is struct Uniforms { resolution: vec3f, num:i32, num2:u32 };
+      const info = await module.getCompilationInfo();
+
+      const hasErrors = info.messages?.reduce((err, msg) => err || msg.type === 'error', false);
+      if (hasErrors) {
+        const errors = info.messages
+          .filter(msg => msg.linePos && msg.lineNum && msg.length)
+          .map(msg => ({
+            range: new monaco.Range(msg.lineNum, msg.linePos, msg.lineNum, msg.linePos + msg.length),
+            options: { inlineClassName: 'wgslError' },
+          }));
+        if (errors.length) {
+          decorations = editor.createDecorationsCollection(errors);
+          const firstError = info.messages[0];
+          editor.setPosition({
+            lineNumber: firstError.lineNum,
+            column: firstError.linePos,
+          });
+          editor.revealLineInCenterIfOutsideViewport(firstError.lineNum);
+          editor.focus();
         }
+        errorsElem.style.display = '';
+        errorsElem.appendChild(el(
+          'div',
+          {},
+          [
+            el('div', {textContent: 'wgsl errors:'}),
+            ...info.messages.map(msg => el('div', {textContent: `${msg.lineNum || 0}:${msg.linePos || 0}: ${msg.message}`})),
+          ],
+        ));
+      }
     }
+
+
+*/  
+
+    
+const TYPES = { // Size, needed Space, typearray
+    f32     : [  4,  4, Float32Array ], 
+    i32     : [  4,  4, Int32Array ],
+    u32     : [  4,  4, Uint32Array ],
+    vec2f   : [  8,  8, Float32Array ],
+    vec3f   : [ 12, 16, Float32Array ],
+    vec4f   : [ 16, 16, Float32Array ],
+    mat4x4f : [ 64, 64, Float32Array ],
 }
+
+function calcUniform( list ){
+    console.log( list );
+
+    let space   = 16;
+    let offset  = 0;
+    let size    = null;
+    let pad, f;
+
+    for( const itm of list ){
+        size = TYPES[ itm.type ];   // Get size & alignment
+        f    = space / size[1];     // Get fractional placement on the 16 byte chunk
+        f   -= Math.floor( f );     
+
+        // console.log( i, size, offset, f );
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Fractional Alignment
+        // cases like f32+vec2f+f32, Padding needed between first f32 and vec2f
+        if( f !== 0 ){
+            // console.log( "FRACTIONAL", f, space, size[1], Math.abs( size[1] - ( 16-space ) ) );
+            pad     = Math.abs( size[1] - ( 16 - space ) );
+            space   = Math.max( 0, space - pad );
+            offset += pad;
+        }
+
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Alignment
+        if( space < size[1] ){
+            console.log( "out of space" );
+            offset += space;
+            space   = 16;
+        }
+
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        itm.offset = offset;
+        itm.len    = size[0];
+
+        space  = Math.max( 0, space - size[0] );    // Remove space used by this var
+        offset += size[0];                          // Move starting byte for next var
+    }
+
+    const bufSize = Math.ceil( offset / 16 ) * 16;
+
+    console.log( list );
+    console.log( offset, bufSize );
+}
+
+
+window.addEventListener( 'load', async ()=>{
+    // calcUniform( [
+    //     { name:'v0', type:'vec3f' },    
+    //     { name:'v1', type:'f32' },
+    // ] )
+
+    // calcUniform( [
+    //     { name:'v1', type:'f32' },
+    //     { name:'v1', type:'f32' },
+    //     { name:'v0', type:'vec3f' },
+    // ] );
+
+    // calcUniform( [
+    //     { name:'v1', type:'f32' },
+    //     { name:'v1', type:'f32' },
+    //     { name:'v1', type:'vec2f' },
+    // ] );
+
+    // calcUniform( [
+    //     { name:'v1', type:'f32' },
+    //     { name:'v1', type:'f32' },
+    //     { name:'v1', type:'vec2f' },
+    //     { name:'v1', type:'vec2f' },
+    // ] );
+
+    // calcUniform( [
+    //     { name:'v1', type:'vec2f' },
+    //     { name:'v1', type:'f32' },
+    //     { name:'v1', type:'vec3f' },
+    // ] );
+
+    // const u = new UniformBuffer( [
+    //     { name:'v0', type:'vec2f', default:[1,2] },
+    //     { name:'v1', type:'f32',   default:3 },
+    //     { name:'v2', type:'vec3f', default:[4,5,6] }
+    // ] );
+
+    // u.view.v1 = 5;
+    // u.view.v0 = [3,4];
+    // u.view.v2 = [9,8,7];
+
+    // console.log( new Float32Array( u.localBuf ), u.localBuf.byteLength );
+
+});
 
 
 class Geometry{

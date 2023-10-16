@@ -6,14 +6,27 @@ export default class Fungi{
     // #endregion
 
     // #region CONSTANTS
-    static BYTESIZE = [4,2,4];
-    static FLOAT    = 0;
-    static UINT16   = 1;
-    static UINT32   = 2;
+    static BYTESIZE     = [4,2,4];
+    static FLOAT        = 0;
+    static UINT16       = 1;
+    static UINT32       = 2;
 
-    static VERTEX   = 0;
-    static UNIFORM  = 1;
-    static ELEMENT  = 2;
+    static VERTEX       = 0;
+    static UNIFORM      = 1;
+    static ELEMENT      = 2;
+
+    static TRI          = 0; // WebGLRenderingContext.TRIANGLES         : triangle-list
+    static TRI_STRIP    = 1; // WebGLRenderingContext.TRIANGLE_STRIP    : triangle-strip
+    static LINE         = 2; // WebGLRenderingContext.LINES             : line-list
+    static LINE_STRIP   = 3; // WebGLRenderingContext.LINE_STRIP        : line-strip
+    static POINT        = 4; // WebGLRenderingContext.POINTS            : point-list
+
+    static POSITION     = 0;
+    static NORMAL       = 1;
+    static UV           = 2;
+    static COLOR        = 3;
+    static JOINT        = 4;
+    static WEIGHT       = 5;
     // #endregion
 
     // #region API Loaders

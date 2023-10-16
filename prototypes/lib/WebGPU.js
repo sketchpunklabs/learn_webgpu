@@ -2,6 +2,7 @@ import Fungi from './Fungi.js';
 
 export default class WebGPU{
     // #region MAIN
+    name    = 'webgpu';
     canvas  = null;
     context = null;
     adapter = null;
@@ -60,10 +61,11 @@ export default class WebGPU{
     // #region BUFFERS    
     deleteBuffer( ref ){ ref.destroy(); }
 
-    createBuffer( data, obj ){
+    createBuffer( data, bufType, dataType=Fungi.FLOAT ){
         let isData  = true;
         let isTyped = true;
 
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         const opt   = {
             label               : 'buffer',
             size                : 0,
@@ -71,11 +73,22 @@ export default class WebGPU{
             mappedAtCreation    : false,
         };
 
+        // What type of buffer is it
+        switch( bufType ){
+            case Fungi.VERTEX:  opt.usage |= GPUBufferUsage.VERTEX; break;
+            case Fungi.UNIFORM: opt.usage |= GPUBufferUsage.UNIFORM; break;
+            default:{
+                console.error( 'Unknown buffer type', bufType );
+                return;
+            }
+        }
+
         // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         // Is Data set or creating a blank buffer
-        if( ArrayBuffer.isView( data ) )    opt.size = data.byteLength;
-        else if( Array.isArray( data ) ){
-            opt.size = data.length * Fungi.BYTESIZE[ obj.dataType ];
+        if( ArrayBuffer.isView( data ) || data instanceof ArrayBuffer ){
+            opt.size = data.byteLength;
+        }else if( Array.isArray( data ) ){
+            opt.size = data.length * Fungi.BYTESIZE[ dataType ];
             isTyped  = false;
         }else if( Number.isInteger( data ) ){
             opt.size = data;
@@ -85,19 +98,15 @@ export default class WebGPU{
         // Buffer size MUST be in multiple of 4s, Add padding as needed
         opt.size = Math.ceil( opt.size / 4 ) * 4;
 
-        // What type of buffer is it
-        switch( obj.type ){
-            case Fungi.VERTEX: opt.usage |= GPUBufferUsage.VERTEX; break;
-        }
-
         // Non-type data can't use writeBuffer, need to use Mapped 
         if( isData && !isTyped ) opt.mappedAtCreation = true;
 
         // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         // Create, Save info & push data
-        obj.gRef       = this.device.createBuffer( opt );
-        obj.capacity   = opt.size;
-        obj.size       = opt.size;
+        const obj = {
+            gRef : this.device.createBuffer( opt ),
+            size : opt.size,
+        };
 
         if( isData ){
             // Typed arrays can use writeBuffer
@@ -105,7 +114,7 @@ export default class WebGPU{
             else{
                 // Non-typed arrays need to use MappedRange
                 let tAry;
-                switch( obj.dataType ){
+                switch( dataType ){
                     case Fungi.FLOAT: tAry = new Float32Array( obj.gRef.getMappedRange() ); break;
                 }
 
@@ -113,6 +122,8 @@ export default class WebGPU{
                 obj.gRef.unmap();
             }
         }
+
+        return obj;
     }
     // #endregion
 }

@@ -1,5 +1,15 @@
 import Fungi from './Fungi.js';
 
+// https://gpuweb.github.io/gpuweb/#enumdef-gpuvertexformat
+const SHADER_TYPES = [
+    'float32',
+    'uint16',
+    'uint32',
+    'float32x2',
+    'float32x3',
+    'float32x4',
+];
+
 export default class WebGPU{
     // #region MAIN
     name    = 'webgpu';
@@ -125,5 +135,99 @@ export default class WebGPU{
 
         return obj;
     }
+    // #endregion
+
+    // #region SHADERS / PIPELINES
+
+    createShader( code, obj ){
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // COMPILE CODE
+        // https://developer.mozilla.org/en-US/docs/Web/API/GPUDevice/createShaderModule
+ 
+        let vMod;
+        let fMod;
+
+        if( Array.isArray( code ) ){
+            vMod = this.device.createShaderModule({ label: obj.name + '_vert', code : code[0] });
+            fMod = this.device.createShaderModule({ label: obj.name + '_frag', code : code[1] });
+        }else{
+            vMod = this.device.createShaderModule({ label: obj.name, code });
+            // vMod.getCompilationInfo().then( e=>{console.log( e )} ); Can check for compiling errors.
+        }
+    
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // ATTRIBUTE LAYOUTS
+        const attribs = [];
+        for( const i of Object.values( obj.attributes ) ){
+
+            // console.log( 'sh', i, i.dataType, Fungi.BYTESIZE[ i.dataType ] );
+            attribs.push({
+                arrayStride     : Fungi.BYTESIZE[ i.dataType ],
+                attributes      : [{
+                    format          : SHADER_TYPES[ i.dataType ],
+                    shaderLocation  : i.location,
+                    offset          : 0, // Only matters when dealing with interlaced data
+                }],
+            });
+        }
+
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // UNIFORM LAYOUTS
+        const layout = {
+            label            : obj.name + '_layout',
+            bindGroupLayouts : [],
+        };
+
+        if( Object.keys( obj.uniforms ).length > 0 ){
+            const uniforms = this.device.createBindGroupLayout({
+                label   : obj.name + '_uniforms',
+                entries : [{
+                        binding     : 0,
+                        visibility  : GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+                        buffer      : { type:'uniform' },
+                }],
+            })
+
+            obj.gData[ 'uniformLayout' ] = uniforms;
+            layout.bindGroupLayouts.push( uniforms );
+        }
+
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // PROGRAM / PIPELINE
+        // https://developer.mozilla.org/en-US/docs/Web/API/GPUDevice/createRenderPipeline
+
+        const layoutRef = this.device.createPipelineLayout( layout );
+        
+        const pipe      = this.device.createRenderPipeline({
+            label       : obj.name + '_pipeline',
+            // layout      : 'auto',       // If auto, the bindgroup is locked to this pipeline
+            layout      : layoutRef,
+
+            primitive   : {
+                topology    : 'triangle-list',
+                cullMode    : 'none', // back, front
+                frontFace   : 'ccw',  // cw
+            },
+    
+            // multisample:{ alphaToCoverageEnabled:false, count:1 },
+    
+            vertex      : {
+                module      : vMod,
+                entryPoint  : 'vMain',
+                buffers     : attribs,
+            },
+    
+            fragment    : {
+                module      : fMod || vMod,
+                entryPoint  : 'fMain',
+                targets     : [ { format: this.format } ],
+            },
+        });
+
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // FINAL
+        obj.gData.ref = pipe;
+    }
+
     // #endregion
 }

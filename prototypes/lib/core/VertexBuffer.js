@@ -2,7 +2,7 @@ import Fungi from '../Fungi.js';
 
 export default class VertexBuffer{
     gRef        = null;         // GPU Reference
-    loc         = 0;            // Attribute Location
+    // loc         = 0;            // Attribute Location
     type        = Fungi.VERTEX; // What Type of buffer is it
     dataType    = Fungi.FLOAT;  // Data Type
     components  = 3;            // How many components, 3 If Vec3, etc

@@ -23,8 +23,10 @@ export default class UniformBuffer{
 
     constructor( json=null ){
         if( json ) this.fromJson( json );
-    }
-    
+    }  
+    // #endregion
+
+    // #region SETTERS
     fromJson( json ){
         const info    = calcSTD140( json );
         const aryBuf  = new ArrayBuffer( info.byteSize );
@@ -50,7 +52,7 @@ export default class UniformBuffer{
         // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         this._buildBuffer();
         return this;
-    }    
+    }
     // #endregion
 
     // #region METHODS
@@ -91,8 +93,9 @@ export default class UniformBuffer{
 
 // #region HELPERS
 // Size, needed Space, byte per comp, typearray
+
 const TYPES = {
-    f32     : [  4,  4, 4, Float32Array ], 
+    f32     : [  4,  4, 4, Float32Array ],
     i32     : [  4,  4, 4, Int32Array ],
     u32     : [  4,  4, 4, Uint32Array ],
     vec2f   : [  8,  8, 4, Float32Array ],
@@ -100,6 +103,16 @@ const TYPES = {
     vec4f   : [ 16, 16, 4, Float32Array ],
     mat4x4f : [ 64, 64, 4, Float32Array ],
 }
+
+const TYPES2 = [
+    [  4,  4, 4, Float32Array ], // f32     : 
+    [  4,  4, 4, Int32Array ], //i32     : 
+    [  4,  4, 4, Uint32Array ], //u32     : 
+    [  8,  8, 4, Float32Array ], //vec2f   : 
+    [ 12, 16, 4, Float32Array ], //vec2f   : 
+    [ 16, 16, 4, Float32Array ], //vec4f   : 
+    [ 64, 64, 4, Float32Array ], //mat4x4f : 
+]
 
 function calcSTD140( list ){
     let space  = 16;
@@ -110,7 +123,9 @@ function calcSTD140( list ){
     const out = [];
 
     for( const itm of list ){
-        size = TYPES[ itm.type ];   // Get size & alignment
+        // size = TYPES[ itm.type ];   // Get size & alignment
+        size = TYPES2[ itm.type ];  
+        
         f    = space / size[1];     // Get fractional placement on the 16 byte chunk
         f   -= Math.floor( f );     
 

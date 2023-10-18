@@ -11,32 +11,149 @@ import Fungi            from './lib/Fungi.js';
 import VertexBuffer     from './lib/core/VertexBuffer.js';
 import UniformBuffer    from './lib/core/UniformBuffer.js';
 
-Fungi.ready( { api:'webgpu' } )
-    .catch( err=>console.error( err ) )    
-    .then( ()=>{        
         // const vBuf = new VertexBuffer().set( new Float32Array([0,1,2]) ); // Typed Data
         // const vBuf = new VertexBuffer().set( [0,1,2] );  // Non-typed
         // const vBuf = new VertexBuffer().set( 3*4 );  // Allocate only in bytes
         // console.log( vBuf );
         // vBuf.dispose();
 
-        const u = new UniformBuffer( [
-            { name:'v0', type:'vec2f', default:[1,2] },
-            { name:'v1', type:'f32',   default:3 },
-            { name:'v2', type:'vec3f', default:[4,5,6] }
-        ] );
+        // const u = new UniformBuffer( [
+        //     { name:'v0', type:'vec2f', default:[1,2] },
+        //     { name:'v1', type:'f32',   default:3 },
+        //     { name:'v2', type:'vec3f', default:[4,5,6] }
+        // ] );
 
-        u.view.v1 = 5;
-        u.view.v0 = [3,4];
-        u.view.v2 = [9,8,7];
+        // u.view.v1 = 5;
+        // u.view.v0 = [3,4];
+        // u.view.v2 = [9,8,7];
 
-        console.log( new Float32Array( u.localBuf ), u.localBuf.byteLength );
+        // console.log( new Float32Array( u.localBuf ), u.localBuf.byteLength );
 
-        console.log( u );
+        // console.log( u );
+
+
+//         struct Uniforms {
+//   resolution: vec2<f32>,
+//   aspect: f32,
+//   time: f32,
+//   color: vec4<f32>,
+// };
+
+// // stuff we send to shader land
+// @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+
+Fungi.ready( { api:'webgpu' } )
+    .catch( err=>console.error( err ) )    
+    .then( ()=>{        
+        const sh = new Shader({
+            name        : 'Basic',
+
+            attributes  : [
+                { name:'position', loc:0, type:'vec2f' },
+            ],
+
+            uniforms : [
+                { name:'color', type:'vec3f', default: [0,1,0] },
+                { name:'scale', type:'float', default: 0.5 },
+            ],
+
+            code        : `
+            struct ShaderUniforms{
+                color : vec3f,
+                scale : f32,
+            };
+            @group(0) @binding(0) var<uniform> Uniforms: ShaderUniforms;
+
+            struct VertexOutput{
+                @builtin( position ) pos   : vec4f,
+                @location( 0 )       color : vec3f,
+            }
+
+            @vertex
+            fn vMain( @location(0) pos: vec2f ) -> VertexOutput { // -> @builtin( position ) vec4f
+                // return vec4f( pos, 0, 1 );
+                // return vec4f( pos * Uniforms.scale, 0, 1 );
+
+                var out: VertexOutput;
+                out.pos   = vec4f( pos * Uniforms.scale, 0, 1 );
+                out.color = Uniforms.color;
+                return out;
+            }
+
+            @fragment
+            fn fMain( in: VertexOutput ) -> @location(0) vec4f{
+                return vec4f( in.color, 1 );
+            }
+            `,
+        });
+
+        const raw = {
+            vertices : [ -0.8, -0.8, 0.8, -0.8, 0.8,  0.8, -0.8, -0.8, 0.8,  0.8, -0.8,  0.8, ],
+        };
+
+        // Build Geometry
+        // let geo = new Geometry();
+        // geo.drawCount = raw.vertices.length / 2;
+        // geo.addAttrib( 'position', Fungi.FLOAT, 2, raw.vertices );
+
+        const geo = Geometry.fromStandard( raw ); // Short Hand
+
+        render( sh, geo );
 
     });
 
+
+function render( sh, geo ){
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    const api     = Fungi.api;
+    const encoder = api.device.createCommandEncoder();
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // SETUP RENDER PASS
+    const pass    = encoder.beginRenderPass({
+        label               : 'MainPass',
+        colorAttachments    : [{
+            view        : api.context.getCurrentTexture().createView( { aspect: 'all' } ),
+            clearValue  : [ 0.2, 0.2, 0.2, 1.0 ],
+            loadOp      : 'clear',  // Clear texture on start
+            storeOp     : 'store',  // Save results of draw calls to texture
+        }],
+    });
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // DRAW INSTRUCTIONS
+
+    // ---------------------------
+    pass.setPipeline( sh.gData.ref );
+
+    if( sh.gData.uniformBindGroup ){
+        pass.setBindGroup( 0, sh.gData.uniformBindGroup );
+    }
+
+    // ---------------------------
+    // Set Geometry Attributes to Shader Locations
+    let attr;
+    for( const [ key, buf ] of Object.entries( geo.attributes ) ){    
+        attr = sh.attributes[ key ];
+        if( !attr ){ console.error( 'Geometry attribute not found in shader:', key ); continue; }
+
+        pass.setVertexBuffer( attr.location, buf.gRef );
+    }
+
+    // ---------------------------
+    pass.draw( geo.drawCount );
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // FINISH
+    pass.end();
+    api.device.queue.submit( [ encoder.finish() ] );
+}
+
+
 /*
+https://github.com/CodyJasonBennett/four/blob/main/src/WebGPURenderer.ts
+
 https://github.com/greggman/webgpu-utils
 - Create interleaved Data
 - Load Data Texture
@@ -124,132 +241,161 @@ passEncoder.drawIndexed(bi.numElements);
 
 */  
 
+
+/*
+
+Shader.POSITION = 1;
+Shader.NORMAL   = 2;
+Shader.UV       = 4;
+Shader.COLOR    = 8;
+Shader.JOINTS   = 16;
+Shader.WEIGHTS  = 32;
+Shader.TANGENT  = 64;
+Shader.ATR_STANDARD = Shader.POSITION | Shader.NORMAL | Shader.UV;
+Shader.ATR_SKINNED  = Shader.POSITION | Shader.NORMAL | Shader.UV | Shader.JOINTS | Shader.WEIGHTS;
+
+const sh = new Shader();
+sh.build({
+    attribPresets   : Shader.ATR_STANDARD, 
+    attributes      : {
+        position    : { loc:0, type:FUNGI.VEC2F },
+    },
+    uniforms        : {
+        color : { type:FUNGI.VEC3F, value:[1,1,0] },
+    },
+
+    code : `
     
-const TYPES = { // Size, needed Space, typearray
-    f32     : [  4,  4, Float32Array ], 
-    i32     : [  4,  4, Int32Array ],
-    u32     : [  4,  4, Uint32Array ],
-    vec2f   : [  8,  8, Float32Array ],
-    vec3f   : [ 12, 16, Float32Array ],
-    vec4f   : [ 16, 16, Float32Array ],
-    mat4x4f : [ 64, 64, Float32Array ],
-}
-
-function calcUniform( list ){
-    console.log( list );
-
-    let space   = 16;
-    let offset  = 0;
-    let size    = null;
-    let pad, f;
-
-    for( const itm of list ){
-        size = TYPES[ itm.type ];   // Get size & alignment
-        f    = space / size[1];     // Get fractional placement on the 16 byte chunk
-        f   -= Math.floor( f );     
-
-        // console.log( i, size, offset, f );
-        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        // Fractional Alignment
-        // cases like f32+vec2f+f32, Padding needed between first f32 and vec2f
-        if( f !== 0 ){
-            // console.log( "FRACTIONAL", f, space, size[1], Math.abs( size[1] - ( 16-space ) ) );
-            pad     = Math.abs( size[1] - ( 16 - space ) );
-            space   = Math.max( 0, space - pad );
-            offset += pad;
-        }
-
-        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        // Alignment
-        if( space < size[1] ){
-            console.log( "out of space" );
-            offset += space;
-            space   = 16;
-        }
-
-        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        itm.offset = offset;
-        itm.len    = size[0];
-
-        space  = Math.max( 0, space - size[0] );    // Remove space used by this var
-        offset += size[0];                          // Move starting byte for next var
-    }
-
-    const bufSize = Math.ceil( offset / 16 ) * 16;
-
-    console.log( list );
-    console.log( offset, bufSize );
-}
-
-
-window.addEventListener( 'load', async ()=>{
-    // calcUniform( [
-    //     { name:'v0', type:'vec3f' },    
-    //     { name:'v1', type:'f32' },
-    // ] )
-
-    // calcUniform( [
-    //     { name:'v1', type:'f32' },
-    //     { name:'v1', type:'f32' },
-    //     { name:'v0', type:'vec3f' },
-    // ] );
-
-    // calcUniform( [
-    //     { name:'v1', type:'f32' },
-    //     { name:'v1', type:'f32' },
-    //     { name:'v1', type:'vec2f' },
-    // ] );
-
-    // calcUniform( [
-    //     { name:'v1', type:'f32' },
-    //     { name:'v1', type:'f32' },
-    //     { name:'v1', type:'vec2f' },
-    //     { name:'v1', type:'vec2f' },
-    // ] );
-
-    // calcUniform( [
-    //     { name:'v1', type:'vec2f' },
-    //     { name:'v1', type:'f32' },
-    //     { name:'v1', type:'vec3f' },
-    // ] );
-
-    // const u = new UniformBuffer( [
-    //     { name:'v0', type:'vec2f', default:[1,2] },
-    //     { name:'v1', type:'f32',   default:3 },
-    //     { name:'v2', type:'vec3f', default:[4,5,6] }
-    // ] );
-
-    // u.view.v1 = 5;
-    // u.view.v0 = [3,4];
-    // u.view.v2 = [9,8,7];
-
-    // console.log( new Float32Array( u.localBuf ), u.localBuf.byteLength );
+    `,
 
 });
+*/
+
+// { name:'position', loc:0, type:Fungi.VEC3F },
+class ShaderAttribute{
+    name        = '';
+    location    = 0;
+    dataType    = Fungi.VEC3F;
+
+    constructor( json ){
+        this.name = json.name;
+
+        if( json.loc ) this.location = json.loc;
+        if( json.type ){
+            const t = Fungi[ json.type.toUpperCase() ];
+            if( t === undefined )   console.error( 'Unknown Attribute Data Type:', json.type );
+            else                    this.dataType = t;            
+        }
+    }
+}
+
+// { name:'color', type:Fungi.VEC3F, value:[1,1,0] },
+class ShaderUniform{
+    name     = '';
+    type     = Fungi.VEC3F;
+    default  = null;
+    constructor( json ){
+        this.name = json.name;
+
+        if( json.default ) this.default  = json.default;
+        if( json.type ){
+            const t = Fungi[ json.type.toUpperCase() ];
+            if( t === undefined )   console.error( 'Unknown Attribute Data Type:', json.type );
+            else                    this.type = t;            
+        }
+    }
+}
+
+class Shader{
+    gData           = { ref: null }; // Pipeline Reference, plus other extra bits for WebGPU.
+
+    name            = 'shaderX';
+    attributes      = {};
+    uniforms        = {};
+
+    uniformBuffer   = null;
+
+    // vertSrc     = '';   
+    // fragSrc     = '';
+    // drawMode    = Fungi.TRI;
+    // cullMode    = Fungi.BACK; // front, none
+    // frontFace   = 'ccw';
+    // useAlpha    = false;
+    // doubleSided = false; // Guess turns on cullMode
+
+    // indices     = { type:Fungi.UINT16 };
+
+    constructor( json=null ){
+        if( json ) this.build( json );
+    }
+
+    build( json ){
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        if( json.attributes?.length > 0 ){
+            let obj;
+            for( const i of json.attributes ){
+                obj = new ShaderAttribute( i );
+                this.attributes[ obj.name ] = obj;
+            }
+        }
+
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        if( json.uniforms?.length > 0 ){
+            let obj;
+            for( const i of json.uniforms ){
+                obj = new ShaderUniform( i );
+                this.uniforms[ obj.name ] = obj;
+            }
+        }
+
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+        Fungi.api.createShader( json.code || [ json.vertex, json.fragment ], this );
+
+        if( this.gData.uniformLayout ){
+            
+            this.uniformBuffer = new UniformBuffer( Object.values( this.uniforms ) );
+
+            this.gData.uniformBindGroup = Fungi.api.device.createBindGroup({
+                label   : this.name + '_uniformBindgroup',
+                layout  : this.gData.uniformLayout,
+                entries : [
+                    { binding: 0, resource: { buffer: this.uniformBuffer.gRef } },
+                ],
+            });
+
+        }
+
+        return this;
+    }
+
+    dispose(){ console.log( 'TODO-Shader Dispose' ); }
+}
 
 
 class Geometry{
     attributes = {};
-    constructor( props={} ){
-        const p = {
-            index:[],
-            position:[], //0
-            normal:[], // 1
-            uv:[], // 2
-            color:[], // 3
-            joints:[], // 4
-            weights:[], // 5
+    drawCount  = 0;
+    constructor(){}
+
+    addAttrib( name, dataType, len, data ){
+        if( !this.attributes[ name ] ){
+            this.attributes[ name ] = new VertexBuffer( dataType, len ).set( data );   
+        }else{
+            console.log( 'Attribute name already exists in geometry:', name );
         }
-
-    }
-
-    // #region Standard Attributes
-    usePosition(){
-        this.attributes[ 'position' ] = new VertexBuffer( data, comLen );
         return this;
     }
 
-    // #endregion
+    static fromStandard( json ){
+        const geo = new Geometry();
+        if( json.vertices ){
+            geo.addAttrib( 'position', Fungi.FLOAT, 2, json.vertices );
+            // geo.attributes[ 'position' ] = new VertexBuffer( Fungi.FLOAT, 2 ).set( json.vertices );
+            geo.drawCount = json.vertices.length / 2;
+        }
+        return geo;
+    }
 }
 
 </script>

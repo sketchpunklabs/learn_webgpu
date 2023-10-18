@@ -8,6 +8,5 @@ export default class Renderable extends Object3D{
 
     /*
     - WebGPU, May need to create One UniformBuffer and BindGroup to hold modelMatrix, etc
-
     */
 }

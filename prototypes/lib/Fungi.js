@@ -6,10 +6,14 @@ export default class Fungi{
     // #endregion
 
     // #region CONSTANTS
-    static BYTESIZE     = [4,2,4];
+    static BYTESIZE     = [ 4, 2, 4, 2*4, 3*4, 4*4, 16*4 ];
     static FLOAT        = 0;
     static UINT16       = 1;
     static UINT32       = 2;
+    static VEC2F        = 3;
+    static VEC3F        = 4;
+    static VEC4F        = 5;
+    static MAT4F        = 6;
 
     static VERTEX       = 0;
     static UNIFORM      = 1;
